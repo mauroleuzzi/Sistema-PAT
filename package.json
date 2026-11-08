@@ -1,0 +1,47 @@
+{
+  "name": "sistema-pat",
+  "version": "1.7.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "^55.0.8-canary-20260328-bdc6273",
+    "@supabase/supabase-js": "^2.100.1",
+    "@tanstack/react-query": "^5.95.2",
+    "date-fns": "^4.1.0",
+    "expo": "55.0.10-canary-20260328-bdc6273",
+    "expo-constants": "^55.0.10-canary-20260328-bdc6273",
+    "expo-document-picker": "^55.0.13",
+    "expo-file-system": "^55.0.17",
+    "expo-image-manipulator": "^55.0.12-canary-20260328-bdc6273",
+    "expo-image-picker": "^55.0.15-canary-20260328-bdc6273",
+    "expo-linking": "^55.0.10-canary-20260328-bdc6273",
+    "expo-location": "^55.1.5-canary-20260328-bdc6273",
+    "expo-print": "^55.0.10-canary-20260328-bdc6273",
+    "expo-router": "^55.0.9-canary-20260328-bdc6273",
+    "expo-sharing": "^55.0.15-canary-20260328-bdc6273",
+    "expo-sqlite": "^55.0.12-canary-20260328-bdc6273",
+    "expo-status-bar": "55.0.5-canary-20260328-bdc6273",
+    "lucide-react-native": "^1.7.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.4",
+    "react-native-paper": "^5.15.0",
+    "react-native-safe-area-context": "^5.7.0",
+    "react-native-screens": "^4.24.0",
+    "react-native-svg": "15.15.3",
+    "react-native-url-polyfill": "^3.0.0",
+    "react-native-vector-icons": "^10.3.0",
+    "react-native-web": "^0.21.2",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

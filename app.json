@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Sistema PAT",
+    "slug": "sistema-pat",
+    "version": "1.7.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.patmediciones.sistema"
+    },
+    "android": {
+      "package": "com.patmediciones.sistema",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a",
+        "foregroundImage": "./assets/icon.png"
+      }
+    },
+    "web": {
+      "name": "Sistema PAT - Mediciones y Protocolos",
+      "shortName": "Sistema PAT",
+      "lang": "es",
+      "themeColor": "#0f172a",
+      "backgroundColor": "#0f172a",
+      "display": "standalone",
+      "orientation": "portrait",
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "jsEngine": "jsc",
+    "scheme": "sistema-pat",
+    "plugins": ["expo-router"]
+  }
+}
