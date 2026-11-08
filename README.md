@@ -136,5 +136,28 @@ node serve_prod.mjs
 
 ---
 
+## 📋 Roadmap de Mejoras Potenciales (A validar con el Técnico en Campo)
+
+Las siguientes propuestas técnicas y funcionales surgen de la auditoría de producto y quedan documentadas como mejoras prioritarias a consensuar con el técnico responsable operativo antes de su implementación:
+
+### 1. Trazabilidad Metrológica del Telurímetro (Res. SRT 900/15 & COPIME)
+- **Campos a incorporar:** 
+  - `numero_serie_instrumento`: Identificación unívoca del equipo de medición (ej. `SONEL MPI-530 S/N: 248910`).
+  - `fecha_calibracion_vigente`: Fecha de emisión del certificado de calibración del laboratorio con trazabilidad INTI / patrón (exigencia obligatoria de aseguradoras ART).
+- **Impacto en Reportes:** Reflejo automático en la Hoja 1 del Protocolo Oficial para superar auditorías sin objeciones.
+
+### 2. Numeración Correlativa e Integridad Digital (Código QR)
+- **Identificador Único:** Generador de código correlativo anual e inviolable por protocolo (ej. `PAT-2026-0001`, `PAT-2026-0002`).
+- **Código QR de Verificación:** Inserción de un QR vectorial al pie del protocolo A4 que enlace a una página de consulta pública de solo lectura para certificar que el documento no ha sido adulterado.
+
+### 3. Accesos Rápidos de Obra y Enlace Directo a WhatsApp
+- **Ficha del Consorcio (`/consorcio/[id]`):**
+  - Botón táctil para discar directamente al administrador o encargado del edificio (`tel:...`).
+  - Botón de apertura en Google Maps / Waze con las coordenadas o dirección normalizada.
+- **Visor de Protocolos PDF:**
+  - Botón directo de `"Compartir Protocolo por WhatsApp"` para remitir el PDF o enlace web de descarga a la administración inmediatamente finalizada la medición.
+
+---
+
 ## ⚖️ Licencia y Cumplimiento Normativo
 Desarrollado para la emisión de informes conforme a los lineamientos del **Consejo Profesional de Ingeniería Mecánica y Electricista (COPIME)** y la **Resolución SRT Nº 900/15** de la Superintendencia de Riesgos del Trabajo de la República Argentina.

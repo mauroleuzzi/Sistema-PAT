@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { Administracion, Consorcio, Medicion, ProfesionalConfig } from '../types';
 import { MOCK_ADMINS, MOCK_CONSORCIOS, MOCK_MEDICIONES, DEFAULT_PROFESIONAL_CONFIG } from '../lib/demoData';
 import { db, loadLocalState, saveLocalState, removeLocalState } from '../db/sqlite';
-import { supabase, getSupabaseConfig } from '../lib/supabase';
+import { supabase, getSupabaseConfig, uploadBase64ToStorage } from '../lib/supabase';
 import { normalizeAddress, calculateNextExpiration } from '../services/importValidator';
 import { generateUUID } from '../lib/utils';
 
@@ -215,6 +215,20 @@ export const DemoProvider = ({ children }: { children: ReactNode }) => {
     if (!getSupabaseConfig().isDemoMode) {
       (async () => {
         try {
+          // 1. Subir fotos a Supabase Storage inmediatamente si son Base64
+          let uploadedTableroUrl = withSync.foto_tablero_url;
+          let uploadedTierraUrl = withSync.foto_tierra_url;
+
+          if (withSync.foto_tablero_url?.startsWith('data:image')) {
+            const up = await uploadBase64ToStorage(finalMedId, 'tablero', withSync.foto_tablero_url);
+            if (up) uploadedTableroUrl = up;
+          }
+
+          if (withSync.foto_tierra_url?.startsWith('data:image')) {
+            const up = await uploadBase64ToStorage(finalMedId, 'tierra', withSync.foto_tierra_url);
+            if (up) uploadedTierraUrl = up;
+          }
+
           let remoteConsorcioId = withSync.consorcio_id;
           const targetCon = consorcios.find(c => c.id === withSync.consorcio_id);
           if (targetCon) {
@@ -272,8 +286,8 @@ export const DemoProvider = ({ children }: { children: ReactNode }) => {
               heredado_locacion: withSync.heredado_locacion,
               heredado_condicion: withSync.heredado_condicion,
               heredado_observaciones: withSync.heredado_observaciones,
-              foto_tablero_url: withSync.foto_tablero_url,
-              foto_tierra_url: withSync.foto_tierra_url,
+              foto_tablero_url: uploadedTableroUrl,
+              foto_tierra_url: uploadedTierraUrl,
               fecha_sync: new Date().toISOString(),
             })
             .select('id')
@@ -286,6 +300,8 @@ export const DemoProvider = ({ children }: { children: ReactNode }) => {
                   ? {
                       ...m,
                       id: inserted.id,
+                      foto_tablero_url: uploadedTableroUrl,
+                      foto_tierra_url: uploadedTierraUrl,
                       sync_status: 'synced',
                       fecha_sync: new Date().toISOString(),
                     }
@@ -336,6 +352,24 @@ export const DemoProvider = ({ children }: { children: ReactNode }) => {
     if (!getSupabaseConfig().isDemoMode && isValidUuid(id)) {
       (async () => {
         try {
+          let updatedTablero = updates.foto_tablero_url;
+          let updatedTierra = updates.foto_tierra_url;
+
+          if (updates.foto_tablero_url?.startsWith('data:image')) {
+            const up = await uploadBase64ToStorage(id, 'tablero', updates.foto_tablero_url);
+            if (up) {
+              updatedTablero = up;
+              setMediciones(prev => prev.map(m => m.id === id ? { ...m, foto_tablero_url: up } : m));
+            }
+          }
+          if (updates.foto_tierra_url?.startsWith('data:image')) {
+            const up = await uploadBase64ToStorage(id, 'tierra', updates.foto_tierra_url);
+            if (up) {
+              updatedTierra = up;
+              setMediciones(prev => prev.map(m => m.id === id ? { ...m, foto_tierra_url: up } : m));
+            }
+          }
+
           const dbUpdates: Record<string, any> = {
             updated_at: new Date().toISOString(),
           };
@@ -344,8 +378,8 @@ export const DemoProvider = ({ children }: { children: ReactNode }) => {
           if (updates.condicion_suelo !== undefined) dbUpdates.condicion_suelo = updates.condicion_suelo;
           if (updates.locacion !== undefined) dbUpdates.locacion = updates.locacion;
           if (updates.observaciones !== undefined) dbUpdates.observaciones = updates.observaciones;
-          if (updates.foto_tablero_url !== undefined) dbUpdates.foto_tablero_url = updates.foto_tablero_url;
-          if (updates.foto_tierra_url !== undefined) dbUpdates.foto_tierra_url = updates.foto_tierra_url;
+          if (updatedTablero !== undefined) dbUpdates.foto_tablero_url = updatedTablero;
+          if (updatedTierra !== undefined) dbUpdates.foto_tierra_url = updatedTierra;
           if (updates.estado !== undefined) dbUpdates.estado = updates.estado;
 
           await supabase.from('mediciones').update(dbUpdates).eq('id', id);

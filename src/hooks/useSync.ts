@@ -160,18 +160,39 @@ export const useSync = () => {
           if (medErr) throw medErr;
 
           const targetMedId = insertedMed?.id || med.id;
+          let syncedTableroUrl = med.foto_tablero_url;
+          let syncedTierraUrl = med.foto_tierra_url;
 
           if (med.foto_tablero_url) {
             const uploaded = await uploadPhotoToSupabase(med.foto_tablero_url, targetMedId, 'tablero');
-            if (uploaded) syncedFotos++;
+            if (uploaded) {
+              syncedTableroUrl = uploaded;
+              syncedFotos++;
+            }
           }
           if (med.foto_tierra_url) {
             const uploaded = await uploadPhotoToSupabase(med.foto_tierra_url, targetMedId, 'toma_tierra');
-            if (uploaded) syncedFotos++;
+            if (uploaded) {
+              syncedTierraUrl = uploaded;
+              syncedFotos++;
+            }
+          }
+
+          if (syncedTableroUrl !== med.foto_tablero_url || syncedTierraUrl !== med.foto_tierra_url) {
+            await supabase
+              .from('mediciones')
+              .update({
+                foto_tablero_url: syncedTableroUrl,
+                foto_tierra_url: syncedTierraUrl,
+              })
+              .eq('id', targetMedId);
           }
 
           syncedMediciones++;
           contextData?.onMedicionSynced?.(med.id, {
+            id: targetMedId,
+            foto_tablero_url: syncedTableroUrl,
+            foto_tierra_url: syncedTierraUrl,
             sync_status: 'synced',
             fecha_sync: new Date().toISOString(),
           });

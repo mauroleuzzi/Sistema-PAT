@@ -112,3 +112,55 @@ export const checkSupabaseConnection = async (customUrl?: string, customKey?: st
     };
   }
 };
+
+/**
+ * Convierte y sube una fotografía en Base64 directamente a Supabase Storage (bucket 'pat-fotos')
+ * Retorna la URL pública HTTPS accesible globalmente o null en caso de falla/offline.
+ */
+export const uploadBase64ToStorage = async (
+  medicionId: string,
+  tipo: 'tablero' | 'tierra',
+  dataUri: string
+): Promise<string | null> => {
+  try {
+    if (!dataUri) return null;
+    if (dataUri.startsWith('http://') || dataUri.startsWith('https://')) {
+      return dataUri;
+    }
+    if (!dataUri.startsWith('data:image')) {
+      return dataUri;
+    }
+
+    const match = dataUri.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+    if (!match) return dataUri;
+
+    const mimeExt = match[1] === 'jpeg' ? 'jpg' : match[1];
+    const base64Data = match[2];
+    const path = `${medicionId}/${tipo}.${mimeExt}`;
+
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: `image/${mimeExt === 'jpg' ? 'jpeg' : mimeExt}` });
+
+    const { error } = await supabase.storage.from('pat-fotos').upload(path, blob, {
+      contentType: `image/${mimeExt === 'jpg' ? 'jpeg' : mimeExt}`,
+      upsert: true,
+    });
+
+    if (error) {
+      console.warn(`Error al subir ${tipo} a Supabase Storage:`, error);
+      return null;
+    }
+
+    const { data: pubData } = supabase.storage.from('pat-fotos').getPublicUrl(path);
+    return pubData?.publicUrl || null;
+  } catch (err) {
+    console.warn(`Error procesando subida de ${tipo} a Storage:`, err);
+    return null;
+  }
+};
+
