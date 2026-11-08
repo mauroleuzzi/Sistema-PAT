@@ -26,13 +26,15 @@ Convierte la aplicación web en una app con icono propio y ejecución a **pantal
 
 #### En Android (Google Chrome):
 1. Abrí **Google Chrome** en el celular.
-2. Ingresá al enlace provisto (ej. `http://192.168.0.4:8090` en la red local o la URL del servidor).
+2. Ingresá al enlace oficial de la app:  
+   👉 **`https://sistema-pat-olive.vercel.app`**
 3. Chrome te mostrará un banner inferior que dice **"Instalar Sistema PAT"** (o tocá el menú de los **3 puntos ⋮** arriba a la derecha y elegí **"Instalar aplicación"** / *"Agregar a la pantalla de inicio"*).
 4. Tocá **Instalar**.
 5. Listo: se creará el icono de **Sistema PAT** en tu pantalla de inicio y en la lista de aplicaciones. Al abrirlo, se ejecuta como una app nativa a pantalla completa.
 
 #### En iPhone (iOS Safari):
-1. Abrí **Safari** e ingresá al enlace de la app.
+1. Abrí **Safari** e ingresá al enlace oficial:  
+   👉 **`https://sistema-pat-olive.vercel.app`**
 2. Tocá el botón de **Compartir** (icono de cuadrado con flecha hacia arriba en la barra inferior).
 3. Deslizá hacia abajo y seleccioná **"Agregar a pantalla de inicio"** (Add to Home Screen).
 4. Tocá **Agregar** arriba a la derecha. La app se abrirá en modo standalone independiente.
