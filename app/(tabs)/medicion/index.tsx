@@ -20,6 +20,9 @@ import {
   Trash2,
   Files,
   Plus,
+  CheckCircle2,
+  Clock,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { formatDate, formatResistance } from '../../../src/lib/utils';
@@ -29,10 +32,11 @@ import { downloadPATReport, PATReportType } from '../../../src/services/pdfGener
 
 export default function Mediciones() {
   const router = useRouter();
-  const { mediciones, consorcios, administraciones, profesionalConfig, deleteMedicion } = useDemo();
+  const { mediciones, consorcios, administraciones, profesionalConfig, deleteMedicion, updateMedicion } = useDemo();
   const { skin } = useSkin();
   const [filterType, setFilterType] = useState<'Año' | 'Consorcio' | 'Administración'>('Año');
   const [selectedYear, setSelectedYear] = useState('Todos');
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'pendientes' | 'aprobados'>('todos');
   const [searchText, setSearchText] = useState('');
   const availableYears = React.useMemo(() => {
     const yearSet = new Set<string>(['2026', '2025', '2024']);
@@ -44,7 +48,11 @@ export default function Mediciones() {
     return ['Todos', ...Array.from(yearSet).sort((a, b) => b.localeCompare(a))];
   }, [mediciones]);
 
-  const handleDownload = async (medicion: any, type: PATReportType) => {
+  const handleDownload = async (
+    medicion: any,
+    type: PATReportType,
+    encomiendaMode?: 'con_encomienda' | 'sin_encomienda'
+  ) => {
     const consorcio = consorcios.find((c: any) => c.id === medicion.consorcio_id) || {
       id: medicion.consorcio_id,
       direccion: 'SIN DIRECCIÓN',
@@ -52,7 +60,7 @@ export default function Mediciones() {
       administracion_id: '',
       activo: true,
     };
-    await downloadPATReport(medicion, consorcio, type, profesionalConfig);
+    await downloadPATReport(medicion, consorcio, type, profesionalConfig, { encomiendaMode });
   };
 
   const handleDeleteMedicion = (item: any, consorcioName: string) => {
@@ -69,6 +77,13 @@ export default function Mediciones() {
     }
   };
 
+  const pendingCount = mediciones.filter(
+    (m: any) => m.estado !== 'aprobado' && m.estado !== 'pdf_generado'
+  ).length;
+  const approvedCount = mediciones.filter(
+    (m: any) => m.estado === 'aprobado' || m.estado === 'pdf_generado'
+  ).length;
+
   const filteredData = mediciones.filter((m: any) => {
     const consorcio = consorcios.find((c: any) => c.id === m.consorcio_id);
     const admin = administraciones.find((a: any) => a.id === consorcio?.administracion_id);
@@ -77,6 +92,10 @@ export default function Mediciones() {
 
     const matchesYear = selectedYear === 'Todos' || year === selectedYear;
     if (!matchesYear) return false;
+
+    const isApproved = m.estado === 'aprobado' || m.estado === 'pdf_generado';
+    if (statusFilter === 'pendientes' && isApproved) return false;
+    if (statusFilter === 'aprobados' && !isApproved) return false;
 
     if (!q) return true;
 
@@ -120,6 +139,40 @@ export default function Mediciones() {
                 ]}
               >
                 {t}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Chips de Estado de Revisión (Flujo Campo vs Oficina) */}
+        <View style={styles.statusChipsRow}>
+          {(
+            [
+              { id: 'todos', label: `Todos (${mediciones.length})` },
+              { id: 'pendientes', label: `⏳ Pendientes (${pendingCount})` },
+              { id: 'aprobados', label: `✅ Aprobados (${approvedCount})` },
+            ] as const
+          ).map(st => (
+            <TouchableOpacity
+              key={st.id}
+              onPress={() => setStatusFilter(st.id)}
+              style={[
+                styles.statusChip,
+                { backgroundColor: skin.surfaceAlt, borderColor: skin.border },
+                statusFilter === st.id && {
+                  backgroundColor: skin.primary,
+                  borderColor: skin.primary,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusChipText,
+                  { color: skin.textSecondary },
+                  statusFilter === st.id && { color: '#fff', fontWeight: '800' },
+                ]}
+              >
+                {st.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -213,6 +266,9 @@ export default function Mediciones() {
           const consorcio = consorcios.find((c: any) => c.id === item.consorcio_id);
           const adminObj = administraciones.find((a: any) => a.id === consorcio?.administracion_id);
           const dirName = consorcio?.direccion || 'Consorcio';
+          const isApproved = item.estado === 'aprobado' || item.estado === 'pdf_generado';
+          const hasMultiplePoints = item.puntos_medicion && item.puntos_medicion.length > 1;
+
           return (
             <Surface
               style={[
@@ -280,30 +336,78 @@ export default function Mediciones() {
                   </View>
                 </View>
 
-                {/* Botón principal: Informe Completo Unificado (Protocolo + Fotos) */}
-                <TouchableOpacity
-                  style={[styles.fullReportBtn, { backgroundColor: skin.primary }]}
-                  onPress={() => handleDownload(item, 'full')}
-                >
-                  <Files size={16} color="#fff" strokeWidth={2.5} />
-                  <Text style={styles.fullReportBtnText}>
-                    INFORME COMPLETO PDF (PROTOCOLO + FOTOS)
-                  </Text>
-                </TouchableOpacity>
+                {/* Badges de Estado de Revisión y Salida Dual */}
+                <View style={styles.cardStatusRow}>
+                  {isApproved ? (
+                    <View style={[styles.statusBadge, { backgroundColor: '#dcfce7' }]}>
+                      <CheckCircle2 size={12} color="#16a344" />
+                      <Text style={[styles.statusBadgeText, { color: '#16a344' }]}>
+                        APROBADO PARA EMISIÓN LEGAL
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.statusBadge, { backgroundColor: '#fef3c7' }]}>
+                      <Clock size={12} color="#b45309" />
+                      <Text style={[styles.statusBadgeText, { color: '#b45309' }]}>
+                        BORRADOR • PENDIENTE DE CONTROL
+                      </Text>
+                    </View>
+                  )}
+                  {hasMultiplePoints && (
+                    <View style={[styles.statusBadge, { backgroundColor: '#f1f5f9' }]}>
+                      <Text style={[styles.statusBadgeText, { color: '#475569' }]}>
+                        {item.puntos_medicion.length} JABALINAS
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
-                {/* Botones individuales */}
-                <View style={styles.cardFooter}>
+                {/* Acción de Aprobación en PC / Oficina */}
+                {!isApproved && (
+                  <TouchableOpacity
+                    style={[styles.approveBtn, { backgroundColor: '#16a344' }]}
+                    onPress={() => {
+                      updateMedicion(item.id, { estado: 'aprobado' });
+                      if (Platform.OS === 'web') {
+                        window.alert('✅ Medición aprobada. Ya puede emitir el protocolo legal sin marca de agua.');
+                      } else {
+                        Alert.alert('Protocolo Aprobado', 'La medición fue aprobada y queda lista para emisión legal.');
+                      }
+                    }}
+                  >
+                    <CheckCircle2 size={16} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.approveBtnText}>APROBAR Y EMITIR PROTOCOLO (OFICINA)</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Salida Dual PDF: Con Encomienda vs Sin Encomienda */}
+                <View style={{ gap: 6, marginTop: 4 }}>
+                  <TouchableOpacity
+                    style={[styles.fullReportBtn, { backgroundColor: skin.primary }]}
+                    onPress={() => handleDownload(item, 'full', 'con_encomienda')}
+                  >
+                    <Files size={15} color="#fff" strokeWidth={2.5} />
+                    <Text style={styles.fullReportBtnText}>
+                      PROTOCOLO OFICIAL (CON ENCOMIENDA COPIME)
+                    </Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[
-                      styles.pdfBtn,
-                      styles.borderOutline,
-                      { backgroundColor: skin.surfaceAlt, borderColor: skin.border },
+                      styles.fullReportBtn,
+                      { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155' },
                     ]}
-                    onPress={() => handleDownload(item, 'protocol')}
+                    onPress={() => handleDownload(item, 'full', 'sin_encomienda')}
                   >
-                    <FileText size={15} color={skin.primary} strokeWidth={2.5} />
-                    <Text style={[styles.pdfBtnText, { color: skin.primary }]}>SOLO PROTOCOLO</Text>
+                    <FileText size={15} color="#93c5fd" strokeWidth={2.5} />
+                    <Text style={[styles.fullReportBtnText, { color: '#93c5fd' }]}>
+                      CERTIFICADO TÉCNICO (SIN ENCOMIENDA)
+                    </Text>
                   </TouchableOpacity>
+                </View>
+
+                {/* Botones secundarios */}
+                <View style={styles.cardFooter}>
                   <TouchableOpacity
                     style={[
                       styles.pdfBtn,
@@ -312,9 +416,26 @@ export default function Mediciones() {
                     ]}
                     onPress={() => handleDownload(item, 'photos')}
                   >
-                    <ImageIcon size={15} color={skin.textPrimary} strokeWidth={2.5} />
+                    <ImageIcon size={14} color={skin.textPrimary} strokeWidth={2.5} />
                     <Text style={[styles.pdfBtnText, { color: skin.textPrimary }]}>SOLO FOTOS</Text>
                   </TouchableOpacity>
+                  {isApproved && (
+                    <TouchableOpacity
+                      style={[
+                        styles.pdfBtn,
+                        styles.borderOutline,
+                        { backgroundColor: skin.surfaceAlt, borderColor: skin.border },
+                      ]}
+                      onPress={() => {
+                        updateMedicion(item.id, { estado: 'borrador' });
+                      }}
+                    >
+                      <Clock size={14} color={skin.textSecondary} strokeWidth={2.5} />
+                      <Text style={[styles.pdfBtnText, { color: skin.textSecondary }]}>
+                        VOLVER A BORRADOR
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </Surface>
@@ -332,6 +453,57 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  statusChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+    flexWrap: 'wrap',
+  },
+  statusChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cardStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  approveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  approveBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
   SegmentedControl: {
     flexDirection: 'row',

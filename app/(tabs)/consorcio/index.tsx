@@ -26,18 +26,30 @@ export default function Consorcios() {
   });
 
   useEffect(() => {
-    if (filter === 'vencidos') setActiveFilter('Vencidos');
+    if (filter === 'ruta' || filter === 'mes') setActiveFilter('Ruta del mes');
+    else if (filter === 'vencidos') setActiveFilter('Vencidos');
     else if (filter === 'pendientes') setActiveFilter('Sin medir');
     else if (filter === 'proximos') setActiveFilter('Próximos');
     else if (filter === 'aldia') setActiveFilter('Al día');
     else if (filter === 'todos') setActiveFilter('Todos');
   }, [filter]);
 
-  const filters = ['Todos', 'Vencidos', 'Próximos', 'Al día', 'Sin medir'];
+  const filters = ['Todos', 'Ruta del mes', 'Vencidos', 'Próximos', 'Al día', 'Sin medir'];
   const measuredConsorcioIds = new Set(mediciones.map(m => m.consorcio_id));
+
+  const now = new Date();
+  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const isRutaDelMes = (c: any) => {
+    if (!c.vencimiento_proximo) return false;
+    const isThisMonth = c.vencimiento_proximo.substring(0, 7) === currentYearMonth;
+    const st = getConsorcioStatus(c, measuredConsorcioIds.has(c.id));
+    return isThisMonth || st.status === 'proximo' || st.status === 'vencido';
+  };
 
   const filterCounts: Record<string, number> = {
     Todos: consorcios.length,
+    'Ruta del mes': consorcios.filter(isRutaDelMes).length,
     Vencidos: consorcios.filter(
       c => getConsorcioStatus(c, measuredConsorcioIds.has(c.id)).status === 'vencido'
     ).length,
@@ -65,6 +77,7 @@ export default function Consorcios() {
 
     if (!matchesSearch) return false;
 
+    if (activeFilter === 'Ruta del mes') return isRutaDelMes(c);
     const st = getConsorcioStatus(c, measuredConsorcioIds.has(c.id));
     if (activeFilter === 'Vencidos') return st.status === 'vencido';
     if (activeFilter === 'Próximos') return st.status === 'proximo';

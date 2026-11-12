@@ -21,11 +21,15 @@ import {
   Calendar,
   Check,
   AlertTriangle,
+  Plus,
+  Trash2,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useDemo } from '../../src/context/DemoContext';
 import { useAuth } from '../../src/context/AuthContext';
+import { PuntoMedicion } from '../../src/types';
 import {
   ResultKeypad,
   PhotoEvidence,
@@ -61,6 +65,13 @@ const SUELO_OPTIONS = [
   { label: 'Seco', value: 'lecho_seco' },
   { label: 'Muy Húmedo', value: 'muy_humedo' },
   { label: 'Otros', value: 'otros' },
+];
+
+const TIERRA_NO_VISIBLE_PRESETS = [
+  'Bajo solado o contrapiso sin cámara accesible',
+  'Bajo baldosa / solado fijo',
+  'En sector inaccesible / unidad privada',
+  'Sin cámara registrable visible',
 ];
 
 export default function NuevaMedicion() {
@@ -112,6 +123,10 @@ export default function NuevaMedicion() {
     tierra_photo: Boolean(existingMedicion?.foto_tierra_url),
     tablero_photo_uri: existingMedicion?.foto_tablero_url || '',
     tierra_photo_uri: existingMedicion?.foto_tierra_url || '',
+    tierra_no_visible: Boolean(existingMedicion?.tierra_no_visible),
+    tierra_motivo_no_visible: existingMedicion?.tierra_motivo_no_visible || 'Bajo solado o contrapiso sin cámara accesible',
+    encomienda_mode: (existingMedicion?.encomienda_mode || 'con_encomienda') as 'con_encomienda' | 'sin_encomienda',
+    puntos_medicion: (existingMedicion?.puntos_medicion || []) as PuntoMedicion[],
     is_inherited: {
       locacion: !existingMedicion && hasHistorical && Boolean(historical?.locacion),
       suelo: !existingMedicion && hasHistorical && Boolean(historical?.condicion_suelo),
@@ -134,6 +149,10 @@ export default function NuevaMedicion() {
       tierra_photo: Boolean(existingMedicion?.foto_tierra_url),
       tablero_photo_uri: existingMedicion?.foto_tablero_url || '',
       tierra_photo_uri: existingMedicion?.foto_tierra_url || '',
+      tierra_no_visible: Boolean(existingMedicion?.tierra_no_visible),
+      tierra_motivo_no_visible: existingMedicion?.tierra_motivo_no_visible || 'Bajo solado o contrapiso sin cámara accesible',
+      encomienda_mode: (existingMedicion?.encomienda_mode || 'con_encomienda') as 'con_encomienda' | 'sin_encomienda',
+      puntos_medicion: (existingMedicion?.puntos_medicion || []) as PuntoMedicion[],
       is_inherited: {
         locacion: !existingMedicion && hasHistorical && Boolean(historical?.locacion),
         suelo: !existingMedicion && hasHistorical && Boolean(historical?.condicion_suelo),
@@ -305,6 +324,7 @@ export default function NuevaMedicion() {
 
   const normativeStatus = getNormativeStatus();
 
+  const tierraSatisfied = formData.tierra_photo || formData.tierra_no_visible;
   const totalSteps = 6;
   const completedCount =
     (getFieldState('locacion') !== 'red' ? 1 : 0) +
@@ -312,13 +332,13 @@ export default function NuevaMedicion() {
     (getFieldState('resultado') === 'green' ? 1 : 0) +
     (getFieldState('observaciones') !== 'red' ? 1 : 0) +
     (formData.tablero_photo ? 1 : 0) +
-    (formData.tierra_photo ? 1 : 0);
+    (tierraSatisfied ? 1 : 0);
 
   const progress = completedCount / totalSteps;
   const hasRedFields =
     ['locacion', 'suelo', 'resultado', 'observaciones'].some(f => getFieldState(f) === 'red') ||
     !formData.tablero_photo ||
-    !formData.tierra_photo;
+    !tierraSatisfied;
   const canSave = !hasRedFields;
 
   const handleSave = () => {
@@ -328,8 +348,8 @@ export default function NuevaMedicion() {
       if (getFieldState('locacion') === 'red') missing.push('Locación de la medición');
       if (getFieldState('suelo') === 'red') missing.push('Condición del suelo');
       if (getFieldState('observaciones') === 'red') missing.push('Observaciones técnicas');
-      if (!formData.tablero_photo) missing.push('Foto Tablero Seccional');
-      if (!formData.tierra_photo) missing.push('Foto Registro Puesta a Tierra');
+      if (!formData.tablero_photo) missing.push('Foto Tablero Seccional (Obligatoria)');
+      if (!tierraSatisfied) missing.push('Foto Jabalina o activar "Jabalina no visible / bajo solado"');
 
       if (Platform.OS === 'web') {
         window.alert(`Faltan completar los siguientes datos:\n\n• ${missing.join('\n• ')}`);
@@ -356,7 +376,11 @@ export default function NuevaMedicion() {
           locacion: formData.locacion.trim(),
           observaciones: formData.observaciones.trim(),
           foto_tablero_url: formData.tablero_photo_uri || undefined,
-          foto_tierra_url: formData.tierra_photo_uri || undefined,
+          foto_tierra_url: formData.tierra_no_visible ? undefined : formData.tierra_photo_uri || undefined,
+          tierra_no_visible: formData.tierra_no_visible,
+          tierra_motivo_no_visible: formData.tierra_no_visible ? formData.tierra_motivo_no_visible : undefined,
+          puntos_medicion: formData.puntos_medicion.length > 0 ? formData.puntos_medicion : undefined,
+          encomienda_mode: formData.encomienda_mode,
         });
       } else {
         const newMed = {
@@ -364,7 +388,7 @@ export default function NuevaMedicion() {
           consorcio_id: consorcio.id,
           usuario_id: user?.id || '11111111-1111-1111-1111-111111111111',
           fecha_medicion: cleanDate,
-          estado: 'pdf_generado' as const,
+          estado: 'pendiente_aprobacion' as const,
           resultado: parseFloat(formData.resultado),
           condicion_suelo: finalSuelo,
           locacion: formData.locacion.trim(),
@@ -373,7 +397,11 @@ export default function NuevaMedicion() {
           heredado_condicion: formData.is_inherited.suelo,
           heredado_observaciones: formData.is_inherited.observaciones,
           foto_tablero_url: formData.tablero_photo_uri || undefined,
-          foto_tierra_url: formData.tierra_photo_uri || undefined,
+          foto_tierra_url: formData.tierra_no_visible ? undefined : formData.tierra_photo_uri || undefined,
+          tierra_no_visible: formData.tierra_no_visible,
+          tierra_motivo_no_visible: formData.tierra_no_visible ? formData.tierra_motivo_no_visible : undefined,
+          puntos_medicion: formData.puntos_medicion.length > 0 ? formData.puntos_medicion : undefined,
+          encomienda_mode: formData.encomienda_mode,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -411,6 +439,13 @@ export default function NuevaMedicion() {
     formData.is_inherited.locacion ||
     formData.is_inherited.suelo ||
     formData.is_inherited.observaciones;
+
+  const histRes = historical?.resultado ? Number(historical.resultado) : null;
+  const currentRes = hasValidResultado ? parsedResultado : null;
+  let compDiffPct: number | null = null;
+  if (histRes && currentRes && histRes > 0) {
+    compDiffPct = ((currentRes - histRes) / histRes) * 100;
+  }
 
   return (
     <View style={styles.container}>
@@ -511,6 +546,192 @@ export default function NuevaMedicion() {
               <Text style={[styles.normativeText, { color: normativeStatus.color }]}>
                 {normativeStatus.label}
               </Text>
+            </View>
+          )}
+
+          {/* MEJORA 1: COMPARATIVA EN VIVO VS AÑO ANTERIOR */}
+          {compDiffPct !== null && histRes !== null && (
+            <View
+              style={[
+                styles.comparativeCard,
+                compDiffPct > 50 || (currentRes && currentRes > 40)
+                  ? styles.compAlertBg
+                  : compDiffPct < -20
+                  ? styles.compSuccessBg
+                  : styles.compNeutralBg,
+              ]}
+            >
+              <View style={styles.compHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  {compDiffPct > 50 || (currentRes && currentRes > 40) ? (
+                    <AlertTriangle size={16} color="#DC2626" />
+                  ) : (
+                    <Activity size={16} color={compDiffPct < -20 ? '#16A344' : '#1F4FFF'} />
+                  )}
+                  <Text
+                    style={[
+                      styles.compTitle,
+                      {
+                        color:
+                          compDiffPct > 50 || (currentRes && currentRes > 40)
+                            ? '#DC2626'
+                            : compDiffPct < -20
+                            ? '#16A344'
+                            : '#0f172a',
+                      },
+                    ]}
+                  >
+                    {compDiffPct > 50
+                      ? 'ALERTA: AUMENTO SIGNIFICATIVO'
+                      : compDiffPct > 20
+                      ? 'VARIACIÓN EN ALZA DETECTADA'
+                      : compDiffPct < -20
+                      ? 'MEJORA RESPECTO AL AÑO ANTERIOR'
+                      : 'VALOR ESTABLE RESPECTO AL HISTÓRICO'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.compDiffBadge,
+                    {
+                      backgroundColor:
+                        compDiffPct > 50
+                          ? '#fee2e2'
+                          : compDiffPct < -20
+                          ? '#dcfce7'
+                          : '#f1f5f9',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.compDiffText,
+                      {
+                        color:
+                          compDiffPct > 50
+                            ? '#DC2626'
+                            : compDiffPct < -20
+                            ? '#16A344'
+                            : '#475569',
+                      },
+                    ]}
+                  >
+                    {compDiffPct >= 0 ? `+${compDiffPct.toFixed(1)}%` : `${compDiffPct.toFixed(1)}%`}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.compDesc}>
+                Anterior: <Text style={{ fontWeight: '800' }}>{formatResistance(histRes)} Ω</Text> ({historicalDateLabel}) → Actual: <Text style={{ fontWeight: '800' }}>{formatResistance(currentRes)} Ω</Text>
+                {compDiffPct > 50
+                  ? '\n⚠️ Posible sulfatación de terminales, borne flojo o desecamiento de jabalina. Verifique antes de cerrar.'
+                  : ''}
+              </Text>
+            </View>
+          )}
+        </Surface>
+
+        {/* MEJORA 2: MÚLTIPLES JABALINAS / PUNTOS DE MEDICIÓN ADICIONALES */}
+        <Surface style={styles.sectionCard} elevation={1}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.titleRow}>
+              <Activity size={18} color="#475569" />
+              <Text style={styles.sectionTitle}>
+                PUNTOS DE MEDICIÓN / JABALINAS ({formData.puntos_medicion.length > 0 ? formData.puntos_medicion.length : '1 PRINCIPAL'})
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.addPuntoBtn}
+              onPress={() => {
+                const nextIdx = formData.puntos_medicion.length + 1;
+                setFormData(prev => ({
+                  ...prev,
+                  puntos_medicion: [
+                    ...prev.puntos_medicion,
+                    {
+                      id: generateUUID(),
+                      etiqueta: `Jabalina ${nextIdx}`,
+                      valor: hasValidResultado ? parsedResultado : 0,
+                      locacion: 'Sala de Máquinas / Subsuelo',
+                    },
+                  ],
+                }));
+              }}
+            >
+              <Plus size={14} color="#1F4FFF" />
+              <Text style={styles.addPuntoBtnText}>+ Agregar Jabalina</Text>
+            </TouchableOpacity>
+          </View>
+
+          {formData.puntos_medicion.length === 0 ? (
+            <Text style={styles.emptyPuntosText}>
+              Consorcio con 1 sola toma de tierra principal (estándar). Si el edificio tiene electrodos adicionales (ej: Ascensores, Bombas o Servicios Generales), podés agregarlos arriba para que figuren en el protocolo.
+            </Text>
+          ) : (
+            <View style={{ gap: 8 }}>
+              {formData.puntos_medicion.map((punto, idx) => (
+                <View key={punto.id} style={styles.puntoRowCard}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <RNTextInput
+                        style={styles.puntoInputTag}
+                        value={punto.etiqueta}
+                        onChangeText={t => {
+                          setFormData(prev => ({
+                            ...prev,
+                            puntos_medicion: prev.puntos_medicion.map((p, i) =>
+                              i === idx ? { ...p, etiqueta: t } : p
+                            ),
+                          }));
+                        }}
+                        placeholder="Ej: Jabalina 2 (Ascensores)"
+                        placeholderTextColor="#94a3b8"
+                      />
+                      <RNTextInput
+                        style={styles.puntoInputVal}
+                        keyboardType="numeric"
+                        value={String(punto.valor || '')}
+                        onChangeText={t => {
+                          const valNum = parseFloat(t) || 0;
+                          setFormData(prev => ({
+                            ...prev,
+                            puntos_medicion: prev.puntos_medicion.map((p, i) =>
+                              i === idx ? { ...p, valor: valNum } : p
+                            ),
+                          }));
+                        }}
+                        placeholder="0.00"
+                        placeholderTextColor="#94a3b8"
+                      />
+                      <Text style={{ fontWeight: '800', color: '#0f172a', fontSize: 13 }}>Ω</Text>
+                    </View>
+                    <RNTextInput
+                      style={styles.puntoInputLoc}
+                      value={punto.locacion || ''}
+                      onChangeText={t => {
+                        setFormData(prev => ({
+                          ...prev,
+                          puntos_medicion: prev.puntos_medicion.map((p, i) =>
+                            i === idx ? { ...p, locacion: t } : p
+                          ),
+                        }));
+                      }}
+                      placeholder="Ubicación (ej: Sala de Máquinas)"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={styles.puntoDeleteBtn}
+                    onPress={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        puntos_medicion: prev.puntos_medicion.filter((_, i) => i !== idx),
+                      }));
+                    }}
+                  >
+                    <Trash2 size={16} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
           )}
         </Surface>
@@ -786,22 +1007,176 @@ export default function NuevaMedicion() {
           </View>
         </Surface>
 
+        {/* TIPO DE PROTOCOLO SOLICITADO / SALIDA DUAL */}
+        <Surface style={styles.sectionCard} elevation={1}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.titleRow}>
+              <FileText size={18} color="#475569" />
+              <Text style={styles.sectionTitle}>TIPO DE DOCUMENTO A EMITIR</Text>
+            </View>
+          </View>
+          <View style={styles.dualOutputRow}>
+            <TouchableOpacity
+              style={[
+                styles.dualOption,
+                formData.encomienda_mode === 'con_encomienda' && styles.dualOptionActive,
+              ]}
+              onPress={() => setFormData(prev => ({ ...prev, encomienda_mode: 'con_encomienda' }))}
+            >
+              <Text
+                style={[
+                  styles.dualOptionTitle,
+                  formData.encomienda_mode === 'con_encomienda' && styles.dualOptionTitleActive,
+                ]}
+              >
+                📜 Con Encomienda COPIME
+              </Text>
+              <Text style={styles.dualOptionSub}>Protocolo Oficial con timbrado colegial reglamentario.</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.dualOption,
+                formData.encomienda_mode === 'sin_encomienda' && styles.dualOptionActive,
+              ]}
+              onPress={() => setFormData(prev => ({ ...prev, encomienda_mode: 'sin_encomienda' }))}
+            >
+              <Text
+                style={[
+                  styles.dualOptionTitle,
+                  formData.encomienda_mode === 'sin_encomienda' && styles.dualOptionTitleActive,
+                ]}
+              >
+                📋 Certificado Técnico (Sin Encomienda)
+              </Text>
+              <Text style={styles.dualOptionSub}>Relevamiento y verificación anual sin arancel COPIME.</Text>
+            </TouchableOpacity>
+          </View>
+        </Surface>
+
         {/* 6. EVIDENCIA FOTOGRÁFICA */}
         <PhotoEvidence
-          label="6A. Foto Tablero Seccional"
+          label="6A. Foto Tablero Seccional (Obligatoria)"
           captured={formData.tablero_photo}
           photoUri={formData.tablero_photo_uri}
           onTake={() => handleCapturePhoto('tablero', 'camera')}
           onUpload={() => handleCapturePhoto('tablero', 'gallery')}
         />
 
-        <PhotoEvidence
-          label="6B. Foto Registro Puesta a Tierra (Jabalina)"
-          captured={formData.tierra_photo}
-          photoUri={formData.tierra_photo_uri}
-          onTake={() => handleCapturePhoto('tierra', 'camera')}
-          onUpload={() => handleCapturePhoto('tierra', 'gallery')}
-        />
+        {/* 6B. Foto Registro Puesta a Tierra (Jabalina) con Opción No Visible */}
+        <Surface style={styles.sectionCard} elevation={1}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.titleRow}>
+              <Text style={styles.sectionTitle}>6B. FOTO JABALINA / REGISTRO P.A.T.</Text>
+            </View>
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor: formData.tierra_photo
+                    ? '#dcfce7'
+                    : formData.tierra_no_visible
+                    ? '#fef3c7'
+                    : '#fee2e2',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.badgeText,
+                  {
+                    color: formData.tierra_photo
+                      ? '#16A344'
+                      : formData.tierra_no_visible
+                      ? '#B45309'
+                      : '#DC2626',
+                  },
+                ]}
+              >
+                {formData.tierra_photo
+                  ? 'FOTO CARGADA'
+                  : formData.tierra_no_visible
+                  ? 'NO VISIBLE'
+                  : 'FALTANTE'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Toggle para indicar si no es visible */}
+          <TouchableOpacity
+            style={[
+              styles.noVisibleToggle,
+              formData.tierra_no_visible && styles.noVisibleToggleActive,
+            ]}
+            onPress={() =>
+              setFormData(prev => ({
+                ...prev,
+                tierra_no_visible: !prev.tierra_no_visible,
+              }))
+            }
+          >
+            <View
+              style={[
+                styles.checkSquare,
+                formData.tierra_no_visible && styles.checkSquareActive,
+              ]}
+            >
+              {formData.tierra_no_visible && <Check size={14} color="#fff" strokeWidth={3} />}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.noVisibleToggleTitle}>
+                Jabalina no visible / bajo solado (sin cámara)
+              </Text>
+              <Text style={styles.noVisibleToggleSub}>
+                Tildá si el electrodo está embutido bajo baldosa/contrapiso y no es posible fotografiarlo.
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {formData.tierra_no_visible ? (
+            <View style={styles.noVisibleDetailsBox}>
+              <Text style={styles.noVisibleDetailsLabel}>MOTIVO TÉCNICO DE NO VISIBILIDAD:</Text>
+              <RNTextInput
+                style={styles.noVisibleInput}
+                value={formData.tierra_motivo_no_visible}
+                onChangeText={t => setFormData(prev => ({ ...prev, tierra_motivo_no_visible: t }))}
+                placeholder="Indique motivo o elija una opción rápida..."
+                placeholderTextColor="#94a3b8"
+              />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {TIERRA_NO_VISIBLE_PRESETS.map((motivo, mi) => (
+                  <TouchableOpacity
+                    key={mi}
+                    style={[
+                      styles.motivoPill,
+                      formData.tierra_motivo_no_visible === motivo && styles.motivoPillActive,
+                    ]}
+                    onPress={() =>
+                      setFormData(prev => ({ ...prev, tierra_motivo_no_visible: motivo }))
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.motivoPillText,
+                        formData.tierra_motivo_no_visible === motivo && styles.motivoPillTextActive,
+                      ]}
+                    >
+                      {motivo}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <PhotoEvidence
+              label="Foto Registro Puesta a Tierra (Jabalina)"
+              captured={formData.tierra_photo}
+              photoUri={formData.tierra_photo_uri}
+              onTake={() => handleCapturePhoto('tierra', 'camera')}
+              onUpload={() => handleCapturePhoto('tierra', 'gallery')}
+            />
+          )}
+        </Surface>
 
         <View style={{ height: 130 }} />
       </ScrollView>
@@ -822,10 +1197,10 @@ export default function NuevaMedicion() {
           ) : (
             <>
               <Text style={styles.saveBtnText}>
-                {existingMedicion
-                  ? 'GUARDAR CAMBIOS DE MEDICIÓN'
+                {existingMedicion?.estado === 'aprobado'
+                  ? 'GUARDAR CAMBIOS (APROBADO)'
                   : canSave
-                  ? 'GUARDAR Y GENERAR PROTOCOLO'
+                  ? 'GUARDAR INFORME (ENVIAR A REVISIÓN)'
                   : `COMPLETAR DATOS (${completedCount}/${totalSteps})`}
               </Text>
               {canSave && <CheckCircle2 size={22} color="#fff" />}
@@ -1162,5 +1537,235 @@ const styles = StyleSheet.create({
   confirmLabel: {
     fontSize: 15,
     fontWeight: '900',
+  },
+  // MEJORA 1: COMPARATIVA
+  comparativeCard: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  compAlertBg: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+  },
+  compSuccessBg: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#86efac',
+  },
+  compNeutralBg: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+  },
+  compHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  compTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  compDiffBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  compDiffText: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  compDesc: {
+    fontSize: 12,
+    color: '#334155',
+    lineHeight: 17,
+  },
+  // MEJORA 2: PUNTOS ADICIONALES
+  addPuntoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  addPuntoBtnText: {
+    color: '#1F4FFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  emptyPuntosText: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  puntoRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    borderRadius: 10,
+  },
+  puntoInputTag: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  puntoInputVal: {
+    width: 65,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  puntoInputLoc: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 11,
+    color: '#475569',
+  },
+  puntoDeleteBtn: {
+    padding: 8,
+  },
+  // SALIDA DUAL
+  dualOutputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dualOption: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+  },
+  dualOptionActive: {
+    borderColor: '#1F4FFF',
+    backgroundColor: '#eff6ff',
+  },
+  dualOptionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#334155',
+    marginBottom: 4,
+  },
+  dualOptionTitleActive: {
+    color: '#1F4FFF',
+  },
+  dualOptionSub: {
+    fontSize: 10,
+    color: '#64748b',
+    lineHeight: 14,
+  },
+  // JABALINA NO VISIBLE
+  noVisibleToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  noVisibleToggleActive: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#f59e0b',
+  },
+  checkSquare: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#94a3b8',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkSquareActive: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#f59e0b',
+  },
+  noVisibleToggleTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  noVisibleToggleSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  noVisibleDetailsBox: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 12,
+  },
+  noVisibleDetailsLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#64748b',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  noVisibleInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  motivoPill: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  motivoPillActive: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+  },
+  motivoPillText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  motivoPillTextActive: {
+    color: '#b45309',
+    fontWeight: '800',
   },
 });

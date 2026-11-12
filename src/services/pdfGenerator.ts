@@ -7,6 +7,11 @@ import { DEFAULT_PROFESIONAL_CONFIG } from '../lib/demoData';
 
 export type PATReportType = 'protocol' | 'photos' | 'full';
 
+export interface PATReportOptions {
+  encomiendaMode?: 'con_encomienda' | 'sin_encomienda';
+  forceOfficial?: boolean;
+}
+
 const formatSuelo = (s?: string) => {
   if (!s) return 'No especificado';
   const map: Record<string, string> = {
@@ -133,7 +138,8 @@ export const buildPATReportHtml = (
   medicion: Medicion,
   consorcio: Consorcio,
   type: PATReportType,
-  config: ProfesionalConfig = DEFAULT_PROFESIONAL_CONFIG
+  config: ProfesionalConfig = DEFAULT_PROFESIONAL_CONFIG,
+  options: PATReportOptions = {}
 ): string => {
   const defaultSvg = `<svg width="200" height="70" xmlns="http://www.w3.org/2000/svg"><path d="M10 55 Q 30 20 55 50 T 100 45 T 150 15 T 195 40" stroke="#1e293b" stroke-width="2.5" fill="none"/></svg>`;
   const base64Svg =
@@ -141,6 +147,16 @@ export const buildPATReportHtml = (
       ? `data:image/svg+xml;base64,${btoa(defaultSvg)}`
       : `data:image/svg+xml;utf8,${encodeURIComponent(defaultSvg)}`;
   const signatureSrc = config.firmaUrl && config.firmaUrl.trim() !== '' ? config.firmaUrl : base64Svg;
+
+  const isOfficial = options.forceOfficial || medicion.estado === 'aprobado' || medicion.estado === 'pdf_generado';
+  const watermarkHtml = isOfficial
+    ? ''
+    : `<div class="draft-watermark">
+        <span>BORRADOR • REVISIÓN TÉCNICA</span>
+        <small>NO VÁLIDO COMO CERTIFICADO LEGAL</small>
+      </div>`;
+
+  const isConEncomienda = (options.encomiendaMode ?? medicion.encomienda_mode) !== 'sin_encomienda';
 
   const medicionLongDate = formatLongDateEs(medicion.fecha_medicion);
   const year = medicion.fecha_medicion?.substring(0, 4) ?? String(new Date().getFullYear());
@@ -152,7 +168,7 @@ export const buildPATReportHtml = (
 
   const docTitle =
     type === 'protocol'
-      ? `PROTOCOLO PAT ${year} - ${dir}`
+      ? `${isConEncomienda ? 'PROTOCOLO' : 'CERTIFICADO'} PAT ${year} - ${dir}`
       : type === 'photos'
       ? `ANEXO FOTOS PAT ${dateStr} - ${dir}`
       : `INFORME COMPLETO PAT ${year} - ${dir}`;
@@ -166,11 +182,54 @@ export const buildPATReportHtml = (
       ? medicion.foto_tierra_url
       : undefined;
 
+  const puntos = medicion.puntos_medicion || [];
+  const hasMultiplePuntos = puntos.length > 1;
+  const puntosHtml = hasMultiplePuntos
+    ? `
+    <div class="section-title">Detalle de Puntos / Jabalinas Relevadas (${puntos.length})</div>
+    <div class="puntos-grid">
+      ${puntos
+        .map(
+          (p, idx) => `
+        <div class="punto-item">
+          <div><span class="punto-name">#${idx + 1} ${p.etiqueta || 'Jabalina'}</span> <span class="punto-loc">${p.locacion ? `(${p.locacion})` : ''}</span></div>
+          <div style="display:flex;align-items:center;">
+            <span class="punto-val">${formatResistance(p.valor)} Ω</span>
+            <span class="punto-badge ${p.valor <= 40 ? 'ok' : 'err'}">${p.valor <= 10 ? 'Óptimo' : p.valor <= 40 ? 'Admisible' : 'Elevado'}</span>
+          </div>
+        </div>
+      `
+        )
+        .join('')}
+    </div>`
+    : '';
+
+  const protocolHeaderTitle = isConEncomienda
+    ? 'PROTOCOLO DE MEDICIÓN DE RESISTENCIA DE PUESTA A TIERRA'
+    : 'CERTIFICADO DE MEDICIÓN DE PUESTA A TIERRA - RELEVAMIENTO TÉCNICO';
+
+  const protocolHeaderSub = isConEncomienda
+    ? `Conforme a "Recomendación ${entidad} H y ST Nº 2.0 – julio/2011" • Res. SRT 900/15`
+    : `Relevamiento y Verificación de Continuidad de P.A.T. • Res. SRT 900/15 y AEA 90364`;
+
+  const protocolAdjuntos = isConEncomienda
+    ? `<b>1-</b> Encomienda Profesional emitida por el ${entidad} &nbsp;&nbsp;
+       <b>2-</b> Fotografías de ubicación de jabalinas y Tableros &nbsp;&nbsp;
+       <b>3-</b> Certificado de calibración del instrumento`
+    : `<b>1-</b> Registro de mediciones técnicas y ensayo de continuidad &nbsp;&nbsp;
+       <b>2-</b> Fotografías de ubicación de jabalinas y Tableros &nbsp;&nbsp;
+       <b>3-</b> Certificado de calibración del instrumento`;
+
+  const protocolDisclaimer = isConEncomienda
+    ? `ESTE PROTOCOLO NO TIENE VALIDEZ SI NO ES ACOMPAÑADO POR LA ENCOMIENDA PROFESIONAL EMITIDA POR EL ${entidad}`
+    : `DOCUMENTO DE RELEVAMIENTO TÉCNICO EMITIDO POR PROFESIONAL MATRICULADO • NO INCLUYE ARANCEL DE ENCOMIENDA COLEGIAL`;
+
   const protocolSectionHtml = `
   <div class="page-sheet">
+    ${watermarkHtml}
     <div class="hdr">
-      <h1>PROTOCOLO DE MEDICIÓN DE RESISTENCIA DE PUESTA A TIERRA</h1>
-      <p>Conforme a "Recomendación ${entidad} H y ST Nº 2.0 – julio/2011" • Res. SRT 900/15</p>
+      <h1>${protocolHeaderTitle}</h1>
+      <p>${protocolHeaderSub}</p>
     </div>
 
     <div class="section-title">Datos del Protocolo</div>
@@ -198,14 +257,14 @@ export const buildPATReportHtml = (
       <div class="sub">Resistencia de<br>Puesta a Tierra</div>
     </div>
 
+    ${puntosHtml}
+
     <div class="section-title">Observaciones</div>
-    <div class="obs-block">${medicion.observaciones || 'Sin observaciones adicionales. La instalación cumple con los niveles de seguridad requeridos.'}</div>
+    <div class="obs-block" style="${hasMultiplePuntos ? 'min-height:16mm;' : ''}">${medicion.observaciones || 'Sin observaciones adicionales. La instalación cumple con los niveles de seguridad requeridos.'}</div>
 
     <div class="section-title">Adjuntos</div>
     <div class="adj-strip">
-      <b>1-</b> Encomienda Profesional emitida por el ${entidad} &nbsp;&nbsp;
-      <b>2-</b> Fotografías de ubicación de jabalinas y Tableros &nbsp;&nbsp;
-      <b>3-</b> Certificado de calibración del instrumento
+      ${protocolAdjuntos}
     </div>
 
     <div class="section-title">Profesional Responsable</div>
@@ -224,12 +283,39 @@ export const buildPATReportHtml = (
     </div>
 
     <div class="disclaimer">
-      ESTE PROTOCOLO NO TIENE VALIDEZ SI NO ES ACOMPAÑADO POR LA ENCOMIENDA PROFESIONAL EMITIDA POR EL ${entidad}
+      ${protocolDisclaimer}
     </div>
   </div>`;
 
+  const tierraCardHtml = validTierraPhoto
+    ? `<div class="photo-card">
+        <h2>2. Toma de Tierra - PAT</h2>
+        <p>${medicion.locacion || 'Toma de tierra general'}</p>
+        <div class="photo-box">
+          <img src="${validTierraPhoto}" alt="Foto Toma de Tierra PAT" onerror="this.style.display='none';this.parentElement.innerHTML='<div class=img-placeholder>[ FOTO TOMA DE TIERRA P.A.T. ]</div>';" />
+        </div>
+      </div>`
+    : `<div class="photo-card">
+        <h2>2. Toma de Tierra - PAT</h2>
+        <p>${medicion.locacion || 'Toma de tierra general'}</p>
+        <div class="photo-box">
+          <div class="no-photo-notice">
+            <div class="no-photo-icon">⚡</div>
+            <div class="no-photo-title">ELECTRODO NO VISIBLE / BAJO SOLADO</div>
+            <div class="no-photo-reason">${medicion.tierra_motivo_no_visible || 'Bajo solado o contrapiso sin cámara accesible'}</div>
+            <p class="no-photo-desc">
+              La jabalina o electrodo de dispersión se encuentra embutido bajo nivel de piso terminado o en sector inaccesible sin cámara de inspección registrable al momento del relevamiento.
+              <br/><br/>
+              La verificación técnica de continuidad y el ensayo de resistencia se realizaron sobre la bornera / barra equipotencial de puesta a tierra del Tablero Seccional General.
+            </p>
+            <div class="no-photo-status">Continuidad de conductor PE: <b>VERIFICADA Y CONFORME</b></div>
+          </div>
+        </div>
+      </div>`;
+
   const photosSectionHtml = `
   <div class="page-sheet">
+    ${watermarkHtml}
     <div class="hdr" style="display:flex;justify-content:space-between;align-items:center;">
       <div>
         <h1>ANEXO FOTOGRÁFICO — PUESTA A TIERRA</h1>
@@ -254,17 +340,7 @@ export const buildPATReportHtml = (
         </div>
       </div>
 
-      <div class="photo-card">
-        <h2>2. Toma de Tierra - PAT</h2>
-        <p>${medicion.locacion || 'Toma de tierra general'}</p>
-        <div class="photo-box">
-          ${
-            validTierraPhoto
-              ? `<img src="${validTierraPhoto}" alt="Foto Toma de Tierra PAT" onerror="this.style.display='none';this.parentElement.innerHTML='<div class=img-placeholder>[ FOTO TOMA DE TIERRA P.A.T. ]</div>';" />`
-              : `<div class="img-placeholder">[ FOTO TOMA DE TIERRA P.A.T. ]</div>`
-          }
-        </div>
-      </div>
+      ${tierraCardHtml}
     </div>
 
     <div class="footer-grid" style="margin-top:6px;">
@@ -299,8 +375,76 @@ export const buildPATReportHtml = (
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111; line-height: 1.35; background: #fff; padding: 8px; }
   @media print { body { padding: 0; } }
-  .page-sheet { width: 100%; page-break-inside: avoid; break-inside: avoid; }
+  .page-sheet { width: 100%; position: relative; page-break-inside: avoid; break-inside: avoid; }
   .page-break { page-break-after: always; break-after: page; height: 1px; }
+  .draft-watermark {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-30deg);
+    border: 4px dashed rgba(220, 38, 38, 0.4);
+    background: rgba(254, 242, 242, 0.7);
+    padding: 16px 32px;
+    text-align: center;
+    border-radius: 12px;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  .draft-watermark span {
+    display: block;
+    font-size: 22pt;
+    font-weight: 900;
+    color: rgba(220, 38, 38, 0.7);
+    letter-spacing: 2px;
+  }
+  .draft-watermark small {
+    display: block;
+    font-size: 9.5pt;
+    font-weight: 800;
+    color: rgba(185, 28, 28, 0.75);
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+  .puntos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 5px;
+    margin-bottom: 7px;
+  }
+  .punto-item {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    border-radius: 4px;
+    padding: 4px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 7.5pt;
+  }
+  .punto-name { font-weight: 700; color: #1e293b; }
+  .punto-loc { font-size: 7pt; color: #64748b; margin-left: 2px; }
+  .punto-val { font-weight: 900; color: #0f172a; font-size: 8.5pt; margin: 0 6px; }
+  .punto-badge { font-size: 6.5pt; font-weight: 800; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; }
+  .punto-badge.ok { background: #dcfce7; color: #16a344; }
+  .punto-badge.err { background: #fee2e2; color: #dc2626; }
+
+  .no-photo-notice {
+    padding: 18px 14px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: #f8fafc;
+    border: 1px dashed #94a3b8;
+    border-radius: 4px;
+  }
+  .no-photo-icon { font-size: 26pt; color: #f59e0b; margin-bottom: 6px; }
+  .no-photo-title { font-size: 9pt; font-weight: 900; color: #0f172a; margin-bottom: 4px; letter-spacing: 0.5px; }
+  .no-photo-reason { font-size: 7.5pt; font-weight: 700; color: #b45309; background: #fef3c7; padding: 3px 8px; border-radius: 4px; margin-bottom: 10px; }
+  .no-photo-desc { font-size: 7.5pt; color: #475569; line-height: 1.4; margin-bottom: 12px; text-align: justify; }
+  .no-photo-status { font-size: 7.5pt; color: #166534; background: #dcfce7; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
   .hdr { background: #2c2c2c; color: #fff; padding: 9px 14px; margin-bottom: 8px; border-radius: 4px; }
   .hdr h1 { font-size: 11.5pt; font-weight: 900; letter-spacing: 0.3px; margin-bottom: 2px; }
   .hdr p  { font-size: 7.5pt; color: #ccc; }
@@ -384,10 +528,13 @@ export const downloadPATReport = async (
   medicion: Medicion,
   consorcio: Consorcio,
   type: PATReportType,
-  config: ProfesionalConfig = DEFAULT_PROFESIONAL_CONFIG
+  config: ProfesionalConfig = DEFAULT_PROFESIONAL_CONFIG,
+  options: PATReportOptions = {}
 ) => {
-  const html = buildPATReportHtml(medicion, consorcio, type, config);
-  const titleLabel = `${consorcio.direccion}`;
+  const html = buildPATReportHtml(medicion, consorcio, type, config, options);
+  const isConEncomienda = (options.encomiendaMode ?? medicion.encomienda_mode) !== 'sin_encomienda';
+  const tagEncomienda = isConEncomienda ? 'CON-ENCOMIENDA' : 'SIN-ENCOMIENDA';
+  const titleLabel = `${consorcio.direccion} [${tagEncomienda}]`;
 
   if (Platform.OS === 'web') {
     openPrintWindowWeb(html, titleLabel);
@@ -404,6 +551,11 @@ export const downloadPATReport = async (
   }
 };
 
-export const generatePATProtocol = async (medicion: Medicion, consorcio: Consorcio, _fotos?: Foto[]) => {
-  return downloadPATReport(medicion, consorcio, 'protocol');
+export const generatePATProtocol = async (
+  medicion: Medicion,
+  consorcio: Consorcio,
+  _fotos?: Foto[],
+  options: PATReportOptions = {}
+) => {
+  return downloadPATReport(medicion, consorcio, 'protocol', DEFAULT_PROFESIONAL_CONFIG, options);
 };

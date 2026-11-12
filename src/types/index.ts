@@ -37,9 +37,19 @@ export type MedicionEstado =
   | 'borrador' 
   | 'pendiente_sync' 
   | 'pendiente_completar' 
+  | 'pendiente_aprobacion'
+  | 'aprobado'
   | 'lista_para_pdf' 
   | 'pdf_generado' 
   | 'anulada';
+
+export interface PuntoMedicion {
+  id: string;
+  etiqueta: string;
+  valor: number;
+  locacion?: string;
+  estado?: 'cumple' | 'no_cumple';
+}
 
 export interface Medicion {
   id: string;
@@ -60,6 +70,10 @@ export interface Medicion {
   fecha_sync?: string;
   foto_tablero_url?: string;
   foto_tierra_url?: string;
+  tierra_no_visible?: boolean;
+  tierra_motivo_no_visible?: string;
+  puntos_medicion?: PuntoMedicion[];
+  encomienda_mode?: 'con_encomienda' | 'sin_encomienda';
   sync_status?: 'pending' | 'synced' | 'error';
 }
 
